@@ -53,6 +53,21 @@ def _download_data(url, data_dir="../data/", data_name="dataset", zipfile=False)
 
 
 def download_partd(data_dir="../data/"):
+    """
+    Download the Medicare Part D expenditure data from the CMS website.
+    This function will dowload the data, load the original Excel file into 
+    a pandas DataFrame and do some data wrangling and cleaning. 
+
+    The end result are a file with drug names (both generic and brand) as well 
+    as one file per year with the actual data. All output files are `feather` files.
+
+    Parameters
+    ----------
+    data_dir : string
+       The path to the directory where the data should be stored.
+
+    """
+
 
     # URL for the CMS Part D data 
     url = 'https://www.cms.gov/Research-Statistics-Data-and-Systems/'+ \
@@ -145,3 +160,5 @@ def download_partd(data_dir="../data/"):
         feather.write_dataframe(partd_years[year], data_dir + 'spending-' + str(year) + '.feather')
 
     return
+
+
