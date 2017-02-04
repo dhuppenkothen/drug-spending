@@ -2,13 +2,14 @@ import requests # to download the dataset
 import zipfile # to extract from archive
 import shutil # to write the dataset to file
 import os # rename file to something more type-able
+import argparse # argument parsing for command line options
 
 import pandas as pd
 import numpy as np
 
 import feather
 
-def _download_data(url, data_dir="../data/", data_name="dataset", zipfile=False):
+def _download_data(url, data_dir="../data/", data_name="dataset", zipped_data=False):
     """
     Helper function to download the data from a given URL into a 
     directory to be specified. If it's a zip file, unzip.
@@ -21,7 +22,7 @@ def _download_data(url, data_dir="../data/", data_name="dataset", zipfile=False)
     data_dir : string, optional, default: "../data/"
         Path to the directory where to store the new data
 
-    zipfile: bool, optional, default: False
+    zipped_data: bool, optional, default: False
         Is the file we download a zip file? If True, unzip it.
     """
 
@@ -40,8 +41,8 @@ def _download_data(url, data_dir="../data/", data_name="dataset", zipfile=False)
         shutil.copyfileobj(response.raw, ds_zipout)
 
     # if it's a zip file, then unzip:   
-    if zipfile:
-        zip = zipfile.ZipFile(data_dir + 'dataset', 'r')
+    if zipped_data:
+        zip = zipfile.ZipFile(data_dir + data_name, 'r')
 
         # get list of file names in zip file:
         ds_filenames = zip.namelist()
@@ -75,7 +76,7 @@ def download_partd(data_dir="../data/"):
           'Downloads/Part_D_All_Drugs_2015.zip'
    
     # download data from CMS:
-    _download_data(url, data_dir=data_dir, data_name="part_d.zip", zipfile=True)
+    _download_data(url, data_dir=data_dir, data_name="part_d.zip", zipped_data=True)
      
     # data is in a form of an Excel sheet (because of course it is)
     # we need to make sure we read the right work sheet (i.e. the one with the data):
@@ -189,7 +190,7 @@ def download_puf(data_dir="../data/", all_columns=True):
 
     
     # download data from CMS:
-    _download_data(url, data_dir=data_dir, data_name="puf.zip", zipfile=True)
+    _download_data(url, data_dir=data_dir, data_name="puf.zip", zipped_data=True)
 
     # read CSV into DataFrame
     puf = pd.read_csv("../data/2010_PD_Profiles_PUF.csv")
@@ -226,7 +227,7 @@ def download_rxnorm(data_dir="../data/"):
     url = "https://download.nlm.nih.gov/rxnorm/RxNorm_full_prescribe_01032017.zip"
 
     # download data from NIH:
-    _download_data(url, data_dir=data_dir, data_name="rxnorm.zip", zipfile=True)
+    _download_data(url, data_dir=data_dir, data_name="rxnorm.zip", zipped_data=True)
 
 
     # Column names as copied from the NIH website
@@ -262,7 +263,7 @@ def download_drug_class_ids(data_dir="../data/"):
           "Statistics-Trends-and-Reports/BSAPUFS/Downloads/2010_PD_Profiles_PUF_DUG.zip"
     
     # download data from CMS:
-    _download_data(url, data_dir=data_dir, data_name="drug_classes_dataset.zip", zipfile=True)
+    _download_data(url, data_dir=data_dir, data_name="drug_classes_dataset.zip", zipped_data=True)
 
     # read drug major classes
     drug_major_class = pd.read_csv(data_dir+"DRUG_MAJOR_CLASS_TABLE.csv")
@@ -449,6 +450,55 @@ def make_drug_table(data_dir="../data/", data_local=True):
    
     return
 
+# if script is called from the command, line, code below is executed.
+if __name__ == "__main__":
 
+    # make an argument parser object to parse command line arguments
+    parser = argparse.ArgumentParser(description="Download and wrangle Medicare drug use data.")
 
+    # define possible command line arguments
+    parser.add_argument("-a", "--download-all", action="store_true", dest="dl_all",
+                        help="If this flag is set, download all data sets")
+    parser.add_argument("--download-partd", action="store_true", dest="dl_partd",
+                        help="If this flag is set, download Medicare Part D data set.")
+    parser.add_argument("--download-rxnorm", action="store_true", dest="dl_rxnorm",
+                        help="If this flag is set, download RxNorm data.")
+    parser.add_argument("--download_puf", action="store_true", dest="dl_puf",
+                        help="If this flag is set, download prescription drug profile data.")
+    parser.add_argument("--download-drug-classes", action="store_true", dest="dl_drugclass",
+                        help="If this flag is set, download drug class ID tables for PUF data.")
+    parser.add_argument("--make-drug-table", action="store_true", dest="make_dtable",
+                        help="If this flag is set, make a table associating drug names in "+  
+                             "the Part D data with RxNorm IDs and drug classes from the PUF data.")
+    parser.add_argument("-d", "--data-dir", action="store", required=False, default="../data/", 
+                        dest="data_dir", help="Optional path to the data directory where data is stored/retrieved.")
+ 
+    # parse arguments
+    clargs = parser.parse_args()
+
+    if clargs.dl_all:
+        print("You have chosen to download all data.")
+        print("Downloading Medicare Part D data ...")
+        download_partd(clargs.data_dir)
+        print("Downloading Prescription Drug Profile data ...")
+        download_puf(clargs.data_dir, all_columns=True)
+        print("Downloading RxNorm data ...")
+        download_rxnorm(clargs.data_dir)
+        print("Download drug class IDs ...")
+        download_drug_class_ids(clargs.data_dir)
+        print("All done!")
+    elif clargs.dl_partd:
+        download_partd(clargs.data_dir)
+    elif clargs.dl_rxnorm:
+        download_rxnorm(clargs.data_dir)
+    elif clargs.dl_puf:
+        download_puf(clargs.data_dir, all_columns=True)
+    elif clargs.dl_drugclass:
+        download_drug_class_ids(clargs.data_dir)
+    else:
+        print("No data to be downloaded.")
+
+    if clargs.make_dtable:
+        print("Combining data sets to associate drug names with IDs and classes ...")
+        make_drug_table(clargs.data_dir, data_local=True)
 
