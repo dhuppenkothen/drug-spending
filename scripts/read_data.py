@@ -92,6 +92,10 @@ def download_partd(data_dir="../data/"):
     # Strip extraneous whitespace from drug names
     partd_drugnames.loc[:, 'drugname_brand'] = partd_drugnames.loc[:, 'drugname_brand'].map(lambda x: x.strip())
     partd_drugnames.loc[:, 'drugname_generic'] = partd_drugnames.loc[:, 'drugname_generic'].map(lambda x: x.strip())
+ 
+    # make all drugnames lowercase:
+    partd_drugnames["drugname_generic"] = partd_drugnames["drugname_generic"].str.lower()
+    partd_drugnames["drugname_brand"] = partd_drugnames["drugname_brand"].str.lower()
 
     # write the results to a feather file:
     feather.write_dataframe(partd_drugnames, data_dir + 'drugnames.feather')
@@ -160,5 +164,291 @@ def download_partd(data_dir="../data/"):
         feather.write_dataframe(partd_years[year], data_dir + 'spending-' + str(year) + '.feather')
 
     return
+
+def download_puf(data_dir="../data/", all_columns=True):
+    """
+    Download the CMS prescription drug profiles.
+    This function will dowload the data, load the original CSV file into 
+    a pandas DataFrame and do some data wrangling and cleaning. 
+
+    The end result will be a feather file with the prescription drug
+    profiles.
+
+    Parameters
+    ----------
+    data_dir : string
+       The path to the directory where the data should be stored.
+
+    all_columns : bool, optional, default: True
+       If True, store all columns in a feather file.
+       If False, only store the columns with RXCUI ID, drug major class 
+       and drug class
+    """
+    url = "https://www.cms.gov/Research-Statistics-Data-and-Systems/"+\
+          "Statistics-Trends-and-Reports/BSAPUFS/Downloads/2010_PD_Profiles_PUF.zip"
+
+    
+    # download data from CMS:
+    _download_data(url, data_dir=data_dir, data_name="puf.zip", zipfile=True)
+
+    # read CSV into DataFrame
+    puf = pd.read_csv("../data/2010_PD_Profiles_PUF.csv")
+
+    # if we don't want to save all columns, drop those except for the three columns 
+    # we're interested in.
+    if not all_columns:
+        puf.drop(["BENE_SEX_IDENT_CD", "BENE_AGE_CAT_CD", "PDE_DRUG_TYPE_CD", "PLAN_TYPE", 
+                 "COVERAGE_TYPE", "benefit_phase","DRUG_BENEFIT_TYPE",
+                 "PRESCRIBER_TYPE", "GAP_COVERAGE", "TIER_ID", "MEAN_RXHCC_SCORE",
+                 "AVE_DAYS_SUPPLY", "AVE_TOT_DRUG_COST", "AVE_PTNT_PAY_AMT",
+                 "PDE_CNT", "BENE_CNT_CAT"], axis=1, inplace=True)
+
+    # write to a DataFrame
+    feather.write_dataframe(puf, data_dir + 'puf.feather')
+
+    return 
+
+def download_rxnorm(data_dir="../data/"):
+    """
+    Download RxNorm data for *currently prescribable* drugs. The RxNorm data 
+    describes a standard identifier for drugs, along with commonly used names, 
+    ingredients and relationships. The full data set is very large and requires a  
+    special licence. Here, we use the subset of drugs that can currently be 
+    prescribed, which are available without licence. We are also going to ignore 
+    the relational data and focus on commonly used identifiers and the RxNorm ID.
+
+    Parameters
+    ----------
+    data_dir : string
+       The path to the directory where the data should be stored.
+    """
+    # URL to the data file
+    url = "https://download.nlm.nih.gov/rxnorm/RxNorm_full_prescribe_01032017.zip"
+
+    # download data from NIH:
+    _download_data(url, data_dir=data_dir, data_name="rxnorm.zip", zipfile=True)
+
+
+    # Column names as copied from the NIH website
+    names = ["RXCUI", "LAT", "TS", "LUI", "STT", "SUI", "ISPREF", "RXAUI",
+         "SAUI", "SCUI", "SDUI", "SAB", "TTY", "CODE", "STR", "SRL", "SUPPRESS", "CVF"]
+
+    # we only want column 0 (the RXCUI identifier) and 14 (the commonly used name)
+    rxnorm = pd.read_csv("../data/rrf/RXNCONSO.RRF", sep="|", names=names, index_col=False,
+                         usecols=[0,14])
+ 
+    # make all strings lowercase
+    rxnorm["STR"] = rxnorm["STR"].str.lower()
+
+    # write to a DataFrame
+    feather.write_dataframe(rxnorm, data_dir + 'rxnorm.feather')
+
+    return
+
+def download_drug_class_ids(data_dir="../data/"):
+    """
+    Download the table associating major and minor classes with alphanumeric codes.
+    This data originates in the VA's National Drug File, but also exists in more accessible 
+    for in the SAS files related to the CMS PUF files.
+
+    Parameters
+    ----------
+    data_dir : string
+       The path to the directory where the data should be stored.
+
+    """
+
+    url = "https://www.cms.gov/Research-Statistics-Data-and-Systems/" + \
+          "Statistics-Trends-and-Reports/BSAPUFS/Downloads/2010_PD_Profiles_PUF_DUG.zip"
+    
+    # download data from CMS:
+    _download_data(url, data_dir=data_dir, data_name="drug_classes_dataset.zip", zipfile=True)
+
+    # read drug major classes
+    drug_major_class = pd.read_csv(data_dir+"DRUG_MAJOR_CLASS_TABLE.csv")
+ 
+    # read drug minor classes
+    drug_class = pd.read_csv(data_dir+"DRUG_CLASS_TABLE.csv")
+
+    # replace NaN values in drug_class table
+    drug_class.replace(to_replace=np.nan, value="N/A", inplace=True)
+
+    # write to a DataFrame
+    feather.write_dataframe(drug_major_class, data_dir + 'drug_major_class.feather')
+    feather.write_dataframe(drug_class, data_dir + 'drug_class.feather')
+
+    return
+
+def make_drug_table(data_dir="../data/", data_local=True):
+    """ 
+    Make a table that associates:
+        * drug brand name
+        * drug generic name
+        * drug RxNorm RXCUI Identifier
+        * drug major class
+        * drug minor class
+
+    If the data doesn't exist locally, it will be downloaded.
+    The output is a feather file called `drugnames_withclasses.feather`.
+
+    Parameters
+    ----------
+    data_dir : string, optional, default: "../data/"
+        The directory that contains the data as .feather files.
+
+    data_local : bool, optional, default: True
+        If True, code assumes that the data exists locally. If this is not 
+        the case, the function will exit with an error. If False, data will  
+        be downloaded to the directory specified in `data_dir`. 
+
+    """ 
+    # if data_local is False, download all the necessary data
+    download_partd(data_dir)
+    download_puf(data_dir, all_columns=False)
+    download_rxnorm(data_dir)
+    download_drug_class_ids(data_dir)
+
+    # assert that data directory and all necessary files exist.
+    assert os.path.isdir(data_dir), "Data directory does not exist!"
+    assert os.path.isfile(data_dir+"drugnames.feather"), "Drugnames file does not exist!"
+    assert os.path.isfile(data_dir+"puf.feather"), "Prescription drug profile data file does not exist!"
+    assert os.path.isfile(data_dir+"rxnorm.feather"), "RxNorm data file does not exist!"
+    assert os.path.isfile(data_dir+"drug_major_class.feather"), "Drug major class file does not exist."
+    assert os.path.isfile(data_dir+"drug_class.feather"), "Drug class file does not exist."
+
+    # load data files from disk
+    drugnames = feather.read_dataframe(data_dir + "drugnames.feather")
+    puf = feather.read_dataframe(data_dir + "puf.feather")
+    rxnorm = feather.read_dataframe(data_dir + "rxnorm.feather")
+    drug_major_class = feather.read_dataframe(data_dir + "drug_major_class.feather")
+    drug_class = feather.read_dataframe(data_dir + "drug_class.feather")
+
+    # make a new column for RXCUI values
+    drugnames["RXCUI"] = "0.0"    
+
+    # associate drug names with RXCUI codes
+    # NOTE: THIS IS A BIT HACKY! 
+ 
+    # loop over indices in list of drug names
+    for idx in drugnames.index:
+
+        # sometimes, we might have more than one RXCUI 
+        # associated with a drug, because the names can 
+        # be a bit ambivalent, so make a list
+        rxcui = []
+
+        # we are going to look for RXCUI codes for both the 
+        # generic name of the drug and the brand name of the drug
+        # because sometimes one might be associated and the other
+        # one isn't
+        for c in ["drugname_generic", "drugname_brand"]:
+
+            # get out the correct row in the table
+            d = drugnames.loc[idx, c]
+            # sometimes a drug has two names, split by a slash
+            # we are going to try and find RXCUI codes for both
+            dsplit = d.split("/")
+
+            # loop over drug names
+            for di in dsplit:
+                # sometimes, a drug has a suffix attached to it
+                # since this doesn't usually exist in the RxNorm table,
+                # we strip anything after a free space
+                displit = di.split(" ")
+                v = rxnorm[rxnorm["STR"] == displit[0]]
+
+                # include all unique RXCUI codes in the list
+                if len(v) > 0:
+                    rxcui.extend(v["RXCUI"].unique())
+                else:
+                    continue
+
+        # if there are more than one RXCUI identifier for a drug,
+        # make a string containing all codes, separated by a '|'
+        if len(rxcui) > 1:
+            rxcui_str = "|".join(np.array(rxcui, dtype=str))
+
+        elif len(rxcui) == 1:
+            rxcui_str = str(rxcui[0])
+        else:
+            # if there is no RXCUI code associated, include a 0
+            rxcui_str = '0.0'
+
+        # associate string with RXCUI codes with the correct row
+        drugnames.loc[idx, "RXCUI"] = rxcui_str
+
+    # number of drugs that I can't find RXCUI codes for:
+    n_missing = len(drugnames[drugnames["RXCUI"] == '0.0'])
+ 
+    print("A fraction of %.2f drugs has no RxNorm entry that I can find."%(n_missing/len(drugnames)))
+
+    # add empty columns for drug classes and associated strings
+    drugnames["drug_major_class"] = ""
+    drugnames["dmc_string"] = ""
+    drugnames["drug_class"] = ""
+    drugnames["dc_string"] = ""
+
+    # make sure RXCUI codes are all strings:
+    drugnames["RXCUI"] = drugnames["RXCUI"].astype(str)
+
+    # loop over drug names again
+    for idx in drugnames.index:
+
+        # get out the RxCUI codes for this entry
+        drug_rxcui = drugnames.loc[idx, "RXCUI"].split("|")
+        
+        # the same way that one drug may have multiple RXCUI codes,
+        # it may also have multiple classes, so make an empty list for them
+        dmc, dc = [], []
+
+        # if there are multiple RXCUIs, we'll need to loop over them:
+        for rxcui in drug_rxcui:
+            # find the right entry in the prescription drug profile data for 
+            # this RXCUI
+            r = puf[puf["RXNORM_RXCUI"] == np.float(rxcui)]
+
+            # there will be duplicates, so let's pick only the set of unique IDs
+            rxc = r.loc[r.index, "RXNORM_RXCUI"].unique()
+
+            # add drug classes for this RXCUI to list
+            dmc.extend(r.loc[r.index, "DRUG_MAJOR_CLASS"].unique())
+            dc.extend(r.loc[r.index, "DRUG_CLASS"].unique())
+
+        # multiple RXCUIs might have the same class, and we only care
+        # about unique entires
+        dmc = np.unique(dmc)
+        dc = np.unique(dc)
+
+        # if there is at least one drug class associated with the drug, 
+        # make a string of all associated drug classes separated by `|`
+        # and store in correct row and column
+        if len(dmc) != 0:
+            drugnames.loc[idx, "drug_major_class"] = "|".join(dmc)
+            dmc_name = np.hstack([drug_major_class.loc[drug_major_class["drug_major_class"] == d, 
+                                                       "drug_major_class_desc"].values for d in dmc])
+            drugnames.loc[idx, "dmc_name"] = "|".join(dmc_name)
+
+        # if there is no class associated, this entry will be zero
+        else:
+            drugnames.loc[idx, "drug_major_class"] = "0"
+            drugnames.loc[idx, "dmc_name"] = "0"
+
+        # same procedure as if-statement just above
+        if len(dc) != 0:
+            drugnames.loc[idx, "drug_class"] = "|".join(dc)
+            dc_name = np.hstack([drug_class.loc[drug_class["drug_class"] == d, 
+                                                "drug_class_desc"].values for d in dc])   
+
+            drugnames.loc[idx, "dc_name"] = "|".join(dc_name)
+        else:
+            drugnames.loc[idx, "drug_class"] = "0"
+            drugnames.loc[idx, "dc_name"] = "0"
+
+    # write results to file
+    feather.write_dataframe(drugnames, data_dir + 'drugnames_withclasses.feather')
+   
+    return
+
+
 
 
