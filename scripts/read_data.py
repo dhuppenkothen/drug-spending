@@ -9,6 +9,12 @@ import numpy as np
 
 import feather
 
+# custom exception for undefined option
+class OptionUndefinedError(Exception):
+    def __init__(self, expression):
+        print("Option for output file format not recognized!")
+
+
 def _download_data(url, data_dir="../data/", data_name="dataset", zipped_data=False):
     """
     Helper function to download the data from a given URL into a 
@@ -53,19 +59,25 @@ def _download_data(url, data_dir="../data/", data_name="dataset", zipped_data=Fa
     return 
 
 
-def download_partd(data_dir="../data/"):
+def download_partd(data_dir="../data/", output_format="feather"):
     """
     Download the Medicare Part D expenditure data from the CMS website.
     This function will dowload the data, load the original Excel file into 
     a pandas DataFrame and do some data wrangling and cleaning. 
 
     The end result are a file with drug names (both generic and brand) as well 
-    as one file per year with the actual data. All output files are `feather` files.
+    as one file per year with the actual data. The file type of the output files 
+    is determined by the `output_format` keyword argument.
 
     Parameters
     ----------
     data_dir : string
        The path to the directory where the data should be stored.
+
+    output_format : string, optional, default: "feather"
+       The file format for the output file. Currently supported data formats are:
+            * "cvs": return comma-separated values in a simple ASCII file
+            * "feather": return a `.feather` file (required `feather` Python package!)
 
     """
 
@@ -98,8 +110,20 @@ def download_partd(data_dir="../data/"):
     partd_drugnames["drugname_generic"] = partd_drugnames["drugname_generic"].str.lower()
     partd_drugnames["drugname_brand"] = partd_drugnames["drugname_brand"].str.lower()
 
-    # write the results to a feather file:
-    feather.write_dataframe(partd_drugnames, data_dir + 'drugnames.feather')
+
+    if output_format == "csv":
+        # get all the column names for the file header
+        hdr = list(partd_drugnames.columns)
+        # add a `#` to the first element of the list so header 
+        # won't be confused for data
+        hdr[0] = "#" + hdr[0]
+        partd_drugnames.to_csv(data_dir + "drugnames.csv", sep="\t", header=hdr,
+                               index=False) 
+    elif output_format == "feather":
+        # write the results to a feather file:
+        feather.write_dataframe(partd_drugnames, data_dir + 'drugnames.feather')
+    else:
+        raise OptionUndefinedError()
 
     # Separate column groups by year
     cols_by_year = [
@@ -159,14 +183,25 @@ def download_partd(data_dir="../data/"):
         for col in partd_years[year].columns[2:]:
             partd_years[year].loc[:, col] = pd.to_numeric(partd_years[year][col])
     pd.options.mode.chained_assignment = 'warn'
- 
-    # Serialize data for each year to feather file for use in both Python and R
-    for year in partd_years:
-        feather.write_dataframe(partd_years[year], data_dir + 'spending-' + str(year) + '.feather')
+
+
+    if output_format == "csv":
+        for year in partd_years:
+            hdr = list(partd_years[year].columns)
+            hdr[0] = "#" + hdr[0]
+            partd_years[year].to_csv(data_dir + "spending-" + str(year) + ".csv", sep="\t", header=hdr,      
+                                     index=False)
+    elif output_format == "feather":
+        # Serialize data for each year to feather file for use in both Python and R
+        for year in partd_years:
+            feather.write_dataframe(partd_years[year], data_dir + 'spending-' + str(year) + '.feather')
+
+    else:
+        raise OptionUndefinedError()
 
     return
 
-def download_puf(data_dir="../data/", all_columns=True):
+def download_puf(data_dir="../data/", all_columns=True , output_format="feather"):
     """
     Download the CMS prescription drug profiles.
     This function will dowload the data, load the original CSV file into 
@@ -184,6 +219,12 @@ def download_puf(data_dir="../data/", all_columns=True):
        If True, store all columns in a feather file.
        If False, only store the columns with RXCUI ID, drug major class 
        and drug class
+
+    output_format : string, optional, default: "feather"
+       The file format for the output file. Currently supported data formats are:
+            * "cvs": return comma-separated values in a simple ASCII file
+            * "feather": return a `.feather` file (required `feather` Python package!)
+        
     """
     url = "https://www.cms.gov/Research-Statistics-Data-and-Systems/"+\
           "Statistics-Trends-and-Reports/BSAPUFS/Downloads/2010_PD_Profiles_PUF.zip"
@@ -204,12 +245,23 @@ def download_puf(data_dir="../data/", all_columns=True):
                  "AVE_DAYS_SUPPLY", "AVE_TOT_DRUG_COST", "AVE_PTNT_PAY_AMT",
                  "PDE_CNT", "BENE_CNT_CAT"], axis=1, inplace=True)
 
-    # write to a DataFrame
-    feather.write_dataframe(puf, data_dir + 'puf.feather')
+    if output_format == "csv":
+        # get all the column names for the file header
+        hdr = list(puf.columns)
+        # add a `#` to the first element of the list so header 
+        # won't be confused for data
+        hdr[0] = "#" + hdr[0]
+        puf.to_csv(data_dir + "puf.csv", sep="\t", header=hdr,
+                               index=False)
+    elif output_format == "feather":
+        # write the results to a feather file:
+        feather.write_dataframe(puf, data_dir + 'puf.feather')
+    else:
+        raise OptionUndefinedError()
 
     return 
 
-def download_rxnorm(data_dir="../data/"):
+def download_rxnorm(data_dir="../data/", output_format="feather"):
     """
     Download RxNorm data for *currently prescribable* drugs. The RxNorm data 
     describes a standard identifier for drugs, along with commonly used names, 
@@ -222,6 +274,12 @@ def download_rxnorm(data_dir="../data/"):
     ----------
     data_dir : string
        The path to the directory where the data should be stored.
+
+    output_format : string, optional, default: "feather"
+       The file format for the output file. Currently supported data formats are:
+            * "cvs": return comma-separated values in a simple ASCII file
+            * "feather": return a `.feather` file (required `feather` Python package!)
+
     """
     # URL to the data file
     url = "https://download.nlm.nih.gov/rxnorm/RxNorm_full_prescribe_01032017.zip"
@@ -241,12 +299,23 @@ def download_rxnorm(data_dir="../data/"):
     # make all strings lowercase
     rxnorm["STR"] = rxnorm["STR"].str.lower()
 
-    # write to a DataFrame
-    feather.write_dataframe(rxnorm, data_dir + 'rxnorm.feather')
+    if output_format == "csv":
+        # get all the column names for the file header
+        hdr = list(rxnorm.columns)
+        # add a `#` to the first element of the list so header 
+        # won't be confused for data
+        hdr[0] = "#" + hdr[0]
+        rxnorm.to_csv(data_dir + "rxnorm.csv", sep="\t", header=hdr,
+                               index=False)
+    elif output_format == "feather":
+        # write the results to a feather file:
+        feather.write_dataframe(rxnorm, data_dir + 'rxnorm.feather')
+    else:
+        raise OptionUndefinedError()
 
     return
 
-def download_drug_class_ids(data_dir="../data/"):
+def download_drug_class_ids(data_dir="../data/", output_format="feather"):
     """
     Download the table associating major and minor classes with alphanumeric codes.
     This data originates in the VA's National Drug File, but also exists in more accessible 
@@ -257,6 +326,10 @@ def download_drug_class_ids(data_dir="../data/"):
     data_dir : string
        The path to the directory where the data should be stored.
 
+    output_format : string, optional, default: "feather"
+       The file format for the output file. Currently supported data formats are:
+            * "cvs": return comma-separated values in a simple ASCII file
+            * "feather": return a `.feather` file (required `feather` Python package!)
     """
 
     url = "https://www.cms.gov/Research-Statistics-Data-and-Systems/" + \
@@ -274,13 +347,31 @@ def download_drug_class_ids(data_dir="../data/"):
     # replace NaN values in drug_class table
     drug_class.replace(to_replace=np.nan, value="N/A", inplace=True)
 
-    # write to a DataFrame
-    feather.write_dataframe(drug_major_class, data_dir + 'drug_major_class.feather')
-    feather.write_dataframe(drug_class, data_dir + 'drug_class.feather')
+    if output_format == "csv":
+        # get all the column names for the file header
+        hdr_dmc = list(drug_major_class.columns)
+        hdr_dc = list(drug_class.columns)
+        # add a `#` to the first element of the list so header 
+        # won't be confused for data
+        hdr_dmc[0] = "#" + hdr_dmc[0]
+        hdr_dc[0] = "#" + hdr_dc[0]
+
+        drug_major_class.to_csv(data_dir + "drug_major_class.csv", sep="\t", header=hdr_dmc,
+                               index=False)
+        drug_class.to_csv(data_dir + "drug_class.csv", sep="\t", header=hdr_dc,
+                          index=False)
+
+    elif output_format == "feather":
+        # write the results to a feather file:
+        feather.write_dataframe(drug_major_class, data_dir + 'drug_major_class.feather')
+        feather.write_dataframe(drug_class, data_dir + 'drug_class.feather')
+    else:
+        raise OptionUndefinedError()
 
     return
 
-def make_drug_table(data_dir="../data/", data_local=True):
+
+def make_drug_table(data_dir="../data/", data_local=True, file_format="feather"):
     """ 
     Make a table that associates:
         * drug brand name
@@ -302,29 +393,62 @@ def make_drug_table(data_dir="../data/", data_local=True):
         the case, the function will exit with an error. If False, data will  
         be downloaded to the directory specified in `data_dir`. 
 
+    file_format : string, optional, default: "feather"
+       The file format for the input files. If `data_local=False`, also the file format for the 
+       output files. Currently supported data formats are:
+            * "cvs": return comma-separated values in a simple ASCII file
+            * "feather": return a `.feather` file (required `feather` Python package!)
+
     """ 
     # if data_local is False, download all the necessary data
-    download_partd(data_dir)
-    download_puf(data_dir, all_columns=False)
-    download_rxnorm(data_dir)
-    download_drug_class_ids(data_dir)
+    if not data_local:
+        download_partd(data_dir, output_format=file_format)
+        download_puf(data_dir, all_columns=False, output_format=file_format)
+        download_rxnorm(data_dir, output_format=file_format)
+        download_drug_class_ids(data_dir, output_format=file_format)
 
     # assert that data directory and all necessary files exist.
     assert os.path.isdir(data_dir), "Data directory does not exist!"
-    assert os.path.isfile(data_dir+"drugnames.feather"), "Drugnames file does not exist!"
-    assert os.path.isfile(data_dir+"puf.feather"), "Prescription drug profile data file does not exist!"
-    assert os.path.isfile(data_dir+"rxnorm.feather"), "RxNorm data file does not exist!"
-    assert os.path.isfile(data_dir+"drug_major_class.feather"), "Drug major class file does not exist."
-    assert os.path.isfile(data_dir+"drug_class.feather"), "Drug class file does not exist."
+    assert (os.path.isfile(data_dir+"drugnames.feather") | os.path.isfile(data_dir+"drugnames.csv")), \
+            "Drugnames file does not exist!"
+    assert (os.path.isfile(data_dir+"puf.feather") | os.path.isfile(data_dir+"puf.csv")), \
+            "Prescription drug profile data file does not exist!"
+    assert (os.path.isfile(data_dir+"rxnorm.feather") | os.path.isfile(data_dir+"rxnorm.csv")), \
+            "RxNorm data file does not exist!"
+    assert (os.path.isfile(data_dir+"drug_major_class.feather") | os.path.isfile(data_dir+"drug_major_class.csv")), \
+            "Drug major class file does not exist."
+    assert (os.path.isfile(data_dir+"drug_class.feather") | os.path.isfile(data_dir+"drug_class.csv")), \
+            "Drug class file does not exist."
 
-    # load data files from disk
-    drugnames = feather.read_dataframe(data_dir + "drugnames.feather")
-    puf = feather.read_dataframe(data_dir + "puf.feather")
-    rxnorm = feather.read_dataframe(data_dir + "rxnorm.feather")
-    drug_major_class = feather.read_dataframe(data_dir + "drug_major_class.feather")
-    drug_class = feather.read_dataframe(data_dir + "drug_class.feather")
+    if file_format == "feather":
+        # load data files from disk
+        drugnames = feather.read_dataframe(data_dir + "drugnames.feather")
+        puf = feather.read_dataframe(data_dir + "puf.feather")
+        rxnorm = feather.read_dataframe(data_dir + "rxnorm.feather")
+        drug_major_class = feather.read_dataframe(data_dir + "drug_major_class.feather")
+        drug_class = feather.read_dataframe(data_dir + "drug_class.feather")
 
-    # make a new column for RXCUI values
+    elif file_format == "csv":
+        drugnames = pd.read_csv(data_dir + "drugnames.csv", sep="\t", header=0)
+        drugnames.columns = drugnames.columns.str.strip("#")
+
+        puf = pd.read_csv(data_dir + "puf.csv", sep="\t", header=0)
+        puf.columns = puf.columns.str.strip("#")
+
+        rxnorm = pd.read_csv(data_dir + "rxnorm.csv", sep="\t", header=0)
+        rxnorm.columns = rxnorm.columns.str.strip("#")
+      
+        drug_major_class = pd.read_csv(data_dir + "drug_major_class.csv", sep="\t", header=0)
+        drug_major_class.columns = drug_major_class.columns.str.strip("#")
+
+        drug_class = pd.read_csv(data_dir + "drug_class.csv", sep="\t", header=0)
+        drug_class.columns = drug_class.columns.str.strip("#")
+        drug_class.drug_class = drug_class.drug_class.astype(str)
+        drug_class.drug_class_desc = drug_class.drug_class_desc.astype(str)
+ 
+    else:
+        raise OptionUndefinedError()
+
     drugnames["RXCUI"] = "0.0"    
 
     # associate drug names with RXCUI codes
@@ -445,10 +569,23 @@ def make_drug_table(data_dir="../data/", data_local=True):
             drugnames.loc[idx, "drug_class"] = "0"
             drugnames.loc[idx, "dc_name"] = "0"
 
-    # write results to file
-    feather.write_dataframe(drugnames, data_dir + 'drugnames_withclasses.feather')
-   
+
+    if file_format == "csv":
+        # get all the column names for the file header
+        hdr = list(drugnames.columns)
+        # add a `#` to the first element of the list so header 
+        # won't be confused for data
+        hdr[0] = "#" + hdr[0]
+        drugnames.to_csv(data_dir + "drugnames_withclasses.csv", sep="\t", header=hdr,
+                               index=False)
+    elif file_format == "feather":
+        # write the results to a feather file:
+        feather.write_dataframe(drugnames, data_dir + 'drugnames_withclasses.feather')
+    else:
+        raise OptionUndefinedError()
+
     return
+
 
 # if script is called from the command, line, code below is executed.
 if __name__ == "__main__":
@@ -457,6 +594,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Download and wrangle Medicare drug use data.")
 
     # define possible command line arguments
+    parser.add_argument("-d", "--data-dir", action="store", required=False, default="../data/",
+                        dest="data_dir", help="Optional path to the data directory where data is " +
+                                              "stored/retrieved. Default: '../data/'")
+    parser.add_argument("-f", "--output-format", action="store", required=False, default="feather",
+                        dest="output_format", help="File format for output files. {'csv' | 'feather'}")
+
     parser.add_argument("-a", "--download-all", action="store_true", dest="dl_all",
                         help="If this flag is set, download all data sets")
     parser.add_argument("--download-partd", action="store_true", dest="dl_partd",
@@ -470,9 +613,6 @@ if __name__ == "__main__":
     parser.add_argument("--make-drug-table", action="store_true", dest="make_dtable",
                         help="If this flag is set, make a table associating drug names in "+  
                              "the Part D data with RxNorm IDs and drug classes from the PUF data.")
-    parser.add_argument("-d", "--data-dir", action="store", required=False, default="../data/", 
-                        dest="data_dir", help="Optional path to the data directory where data is " + 
-                                              "stored/retrieved. Default: '../data/'")
  
     # parse arguments
     clargs = parser.parse_args()
@@ -480,26 +620,26 @@ if __name__ == "__main__":
     if clargs.dl_all:
         print("You have chosen to download all data.")
         print("Downloading Medicare Part D data ...")
-        download_partd(clargs.data_dir)
+        download_partd(clargs.data_dir, output_format=clargs.output_format)
         print("Downloading Prescription Drug Profile data ...")
-        download_puf(clargs.data_dir, all_columns=True)
+        download_puf(clargs.data_dir, all_columns=True, output_format=clargs.output_format)
         print("Downloading RxNorm data ...")
-        download_rxnorm(clargs.data_dir)
+        download_rxnorm(clargs.data_dir, output_format=clargs.output_format)
         print("Download drug class IDs ...")
-        download_drug_class_ids(clargs.data_dir)
+        download_drug_class_ids(clargs.data_dir, output_format=clargs.output_format)
         print("All done!")
     elif clargs.dl_partd:
-        download_partd(clargs.data_dir)
+        download_partd(clargs.data_dir, output_format=clargs.output_format)
     elif clargs.dl_rxnorm:
-        download_rxnorm(clargs.data_dir)
+        download_rxnorm(clargs.data_dir, output_format=clargs.output_format)
     elif clargs.dl_puf:
-        download_puf(clargs.data_dir, all_columns=True)
+        download_puf(clargs.data_dir, all_columns=True, output_format=clargs.output_format)
     elif clargs.dl_drugclass:
-        download_drug_class_ids(clargs.data_dir)
+        download_drug_class_ids(clargs.data_dir, output_format=clargs.output_format)
     else:
         print("No data to be downloaded.")
 
     if clargs.make_dtable:
         print("Combining data sets to associate drug names with IDs and classes ...")
-        make_drug_table(clargs.data_dir, data_local=True)
+        make_drug_table(clargs.data_dir, data_local=True, file_format=clargs.output_format)
 
