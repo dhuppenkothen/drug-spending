@@ -463,7 +463,7 @@ if __name__ == "__main__":
                         help="If this flag is set, download Medicare Part D data set.")
     parser.add_argument("--download-rxnorm", action="store_true", dest="dl_rxnorm",
                         help="If this flag is set, download RxNorm data.")
-    parser.add_argument("--download_puf", action="store_true", dest="dl_puf",
+    parser.add_argument("--download-puf", action="store_true", dest="dl_puf",
                         help="If this flag is set, download prescription drug profile data.")
     parser.add_argument("--download-drug-classes", action="store_true", dest="dl_drugclass",
                         help="If this flag is set, download drug class ID tables for PUF data.")
@@ -471,7 +471,8 @@ if __name__ == "__main__":
                         help="If this flag is set, make a table associating drug names in "+  
                              "the Part D data with RxNorm IDs and drug classes from the PUF data.")
     parser.add_argument("-d", "--data-dir", action="store", required=False, default="../data/", 
-                        dest="data_dir", help="Optional path to the data directory where data is stored/retrieved.")
+                        dest="data_dir", help="Optional path to the data directory where data is " + 
+                                              "stored/retrieved. Default: '../data/'")
  
     # parse arguments
     clargs = parser.parse_args()
