@@ -1,5 +1,8 @@
 ## drug-spending
 
+THIS IS A REALLY DUMB TEST!
+
+
 **Slack:** [#drug-spending](https://datafordemocracy.slack.com/messages/drug-spending/)
 
 [**Project Leads:**](https://github.com/Data4Democracy/read-this-first/blob/master/lead-role-description.md) @mattgawarecki, @jenniferthompson
